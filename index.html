@@ -2,187 +2,201 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Lofi Game</title>
+  <title>News Globe 3D - Interactif</title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    
-    body {
+    body { 
+      margin: 0; 
+      padding: 0; 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #000;
       overflow: hidden;
-      font-family: Arial, sans-serif;
     }
-    
-    #gameCanvas {
-      display: block;
-      background: linear-gradient(to bottom, #fda4af, #f9a8d4, #e9d5ff);
+
+    #globeViz {
+      width: 100vw;
+      height: 100vh;
+      cursor: move; /* Indique qu'on peut bouger le globe */
     }
-    
-    #instructions {
-      position: absolute;
-      bottom: 20px;
+
+    /* --- MODALE (Pop-up) --- */
+    #newsModal {
+      display: none;
+      position: fixed;
+      top: 50%;
       left: 50%;
-      transform: translateX(-50%);
-      background: rgba(255, 255, 255, 0.9);
-      padding: 12px 24px;
-      border-radius: 25px;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-      font-size: 14px;
-      color: #374151;
+      transform: translate(-50%, -50%);
+      background: #1a1a1a; /* Fond sombre plus moderne */
+      color: white;
+      width: 400px;
+      max-width: 90%;
+      padding: 25px;
+      border-radius: 12px;
+      border: 1px solid #333;
+      box-shadow: 0 0 50px rgba(255, 68, 68, 0.2);
+      z-index: 100;
     }
+
+    #newsModal h2 { margin-top: 0; color: #ff4444; }
+    #newsModal p { line-height: 1.6; color: #ccc; }
+    #newsModal img { width: 100%; border-radius: 8px; margin-bottom: 15px; object-fit: cover; height: 200px; }
+    
+    .close-btn {
+      position: absolute;
+      top: 10px;
+      right: 15px;
+      font-size: 28px;
+      cursor: pointer;
+      color: #666;
+      transition: color 0.2s;
+    }
+    .close-btn:hover { color: white; }
+
+    /* Overlay sombre */
+    #overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.8);
+      z-index: 99;
+      backdrop-filter: blur(3px);
+    }
+
+    /* Titres */
+    .site-title {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      color: white;
+      z-index: 10;
+      pointer-events: none;
+      text-shadow: 0 0 10px black;
+    }
+    .site-title h1 { margin: 0; font-size: 24px; text-transform: uppercase; letter-spacing: 2px; color: #ff4444; }
   </style>
+  
+  <script src="//unpkg.com/globe.gl"></script>
 </head>
 <body>
-  <canvas id="gameCanvas"></canvas>
-  <div id="instructions">Utilise les flèches ←↑↓→ ou WASD pour bouger</div>
+
+  <div class="site-title">
+    <h1>Global News 3D</h1>
+    <p>Cliquez sur les points rouges pour voir les détails</p>
+  </div>
+
+  <div id="globeViz"></div>
+
+  <div id="overlay" onclick="closeModal()"></div>
+  
+  <div id="newsModal">
+    <span class="close-btn" onclick="closeModal()">&times;</span>
+    <img id="modalImage" src="" alt="News Image">
+    <h2 id="modalTitle">Titre</h2>
+    <p style="font-size: 0.9em; color: #888;">📍 <span id="modalCountry"></span></p>
+    <p id="modalContent">Contenu...</p>
+  </div>
 
   <script>
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    
-    canvas.width = 800;
-    canvas.height = 600;
-    
-    const player = {
-      x: 400,
-      y: 300,
-      size: 40,
-      speed: 3
-    };
-    
-    const keys = {};
-    
-    window.addEventListener('keydown', (e) => {
-      keys[e.key.toLowerCase()] = true;
+    // 1. DONNÉES
+    const newsData = [
+      {
+        lat: 48.8566, lng: 2.3522,
+        country: "France",
+        title: "Innovation Tech à Paris",
+        content: "Paris devient le nouveau hub européen de l'IA avec l'ouverture de Station F 2.0.",
+        image: "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=500&q=60"
+      },
+      {
+        lat: 40.7128, lng: -74.0060,
+        country: "États-Unis",
+        title: "Wall Street en hausse",
+        content: "Le marché boursier réagit positivement aux nouvelles régulations technologiques.",
+        image: "https://images.unsplash.com/photo-1485871981535-5be8468d930e?auto=format&fit=crop&w=500&q=60"
+      },
+      {
+        lat: 35.6762, lng: 139.6503,
+        country: "Japon",
+        title: "Robotique Avancée",
+        content: "Tokyo présente ses assistants robotiques pour les JO de l'année prochaine.",
+        image: "https://images.unsplash.com/photo-1532236204992-f5e85c024202?auto=format&fit=crop&w=500&q=60"
+      },
+      {
+        lat: -33.8688, lng: 151.2093,
+        country: "Australie",
+        title: "Climat & Océans",
+        content: "Un plan majeur pour la sauvegarde des coraux est lancé ce matin à Sydney.",
+        image: "https://images.unsplash.com/photo-1523482580672-f109ba8cb9be?auto=format&fit=crop&w=500&q=60"
+      },
+      {
+        lat: -22.9068, lng: -43.1729,
+        country: "Brésil",
+        title: "Culture à Rio",
+        content: "Le festival de musique annuel bat son plein avec une affluence record.",
+        image: "https://images.unsplash.com/photo-1564245739699-b511223456e5?auto=format&fit=crop&w=500&q=60"
+      },
+      {
+        lat: 30.0444, lng: 31.2357,
+        country: "Égypte",
+        title: "Découverte Archéologique",
+        content: "Une nouvelle chambre secrète découverte près des grandes pyramides.",
+        image: "https://images.unsplash.com/photo-1539650116455-251601d87cf1?auto=format&fit=crop&w=500&q=60"
+      }
+    ];
+
+    // 2. CONFIGURATION DU GLOBE
+    const world = Globe()
+      (document.getElementById('globeViz'))
+      .globeImageUrl('//unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
+      .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
+      .backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png')
+      
+      // --- COUCHE DES POINTS (CLIQUABLES) ---
+      .pointsData(newsData)
+      .pointAltitude(0.07)      // Hauteur du point par rapport au sol
+      .pointColor(() => '#ff4444') // Couleur rouge
+      .pointRadius(0.5)         // Taille du point
+      .pointLabel('country')    // Affiche le pays au survol (tooltip natif)
+      
+      // L'action au clic (LA PARTIE IMPORTANTE)
+      .onPointClick(point => {
+        // 1. Centrer la caméra sur le point cliqué
+        world.pointOfView({ lat: point.lat, lng: point.lng, altitude: 1.8 }, 1000);
+        // 2. Ouvrir la modale
+        openModal(point);
+      })
+
+      // --- COUCHE DES ANNEAUX (EFFET VISUEL) ---
+      .ringsData(newsData)
+      .ringColor(() => '#ff4444')
+      .ringMaxRadius(5)
+      .ringPropagationSpeed(2)
+      .ringRepeatPeriod(800);
+
+    // Options de la caméra
+
+    // 3. GESTION MODALE
+    const modal = document.getElementById('newsModal');
+    const overlay = document.getElementById('overlay');
+
+    function openModal(data) {
+
+      document.getElementById('modalTitle').innerText = data.title;
+      document.getElementById('modalCountry').innerText = data.country;
+      document.getElementById('modalContent').innerText = data.content;
+      document.getElementById('modalImage').src = data.image;
+
+      modal.style.display = 'block';
+      overlay.style.display = 'block';
+    }
+
+    function closeModal() {
+      modal.style.display = 'none';
+      overlay.style.display = 'none';
+    }
+
+    // Responsive
+    window.addEventListener('resize', () => {
+      world.width(window.innerWidth).height(window.innerHeight);
     });
-    
-    window.addEventListener('keyup', (e) => {
-      keys[e.key.toLowerCase()] = false;
-    });
-    
-    function drawScene() {
-      // Ciel dégradé
-      const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-      gradient.addColorStop(0, '#fda4af');
-      gradient.addColorStop(0.5, '#f9a8d4');
-      gradient.addColorStop(1, '#e9d5ff');
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-      // Nuages
-      ctx.fillStyle = 'rgba(254, 205, 211, 0.6)';
-      ctx.beginPath();
-      ctx.ellipse(150, 80, 60, 25, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.ellipse(180, 90, 50, 20, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.ellipse(600, 100, 70, 30, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.ellipse(640, 110, 55, 25, 0, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Bâtiments en arrière-plan
-      ctx.fillStyle = 'rgba(196, 181, 253, 0.7)';
-      ctx.fillRect(50, 350, 100, 250);
-      ctx.fillStyle = 'rgba(221, 214, 254, 0.7)';
-      ctx.fillRect(180, 300, 120, 300);
-      ctx.fillStyle = 'rgba(196, 181, 253, 0.7)';
-      ctx.fillRect(600, 320, 90, 280);
-      
-      // Sol du rooftop
-      ctx.fillStyle = '#e9d5ff';
-      ctx.fillRect(0, 480, canvas.width, 120);
-      
-      // Plantes décoratives
-      ctx.fillStyle = '#a78bfa';
-      ctx.beginPath();
-      ctx.roundRect(100, 450, 40, 30, 5);
-      ctx.fill();
-      ctx.fillStyle = '#86efac';
-      ctx.beginPath();
-      ctx.arc(120, 440, 20, 0, Math.PI * 2);
-      ctx.fill();
-      
-      ctx.fillStyle = '#a78bfa';
-      ctx.beginPath();
-      ctx.roundRect(650, 450, 40, 30, 5);
-      ctx.fill();
-      ctx.fillStyle = '#86efac';
-      ctx.beginPath();
-      ctx.arc(670, 440, 20, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Banc
-      ctx.fillStyle = '#c084fc';
-      ctx.beginPath();
-      ctx.roundRect(300, 500, 200, 15, 7);
-      ctx.fill();
-      ctx.fillRect(320, 515, 20, 65);
-      ctx.fillRect(460, 515, 20, 65);
-    }
-    
-    function drawPlayer() {
-      const x = player.x;
-      const y = player.y;
-      
-      // Corps
-      ctx.fillStyle = '#f472b6';
-      ctx.beginPath();
-      ctx.ellipse(x, y + 13, 12, 10, 0, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Tête
-      ctx.fillStyle = '#fbbf24';
-      ctx.beginPath();
-      ctx.arc(x, y - 5, 10, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Yeux
-      ctx.fillStyle = '#1f2937';
-      ctx.beginPath();
-      ctx.arc(x - 3, y - 6, 2, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(x + 3, y - 6, 2, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Sourire
-      ctx.strokeStyle = '#1f2937';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(x, y - 3, 4, 0, Math.PI);
-      ctx.stroke();
-    }
-    
-    function updatePlayer() {
-      if (keys['arrowup'] || keys['w'] || keys['z']) {
-        player.y = Math.max(player.size / 2, player.y - player.speed);
-      }
-      if (keys['arrowdown'] || keys['s']) {
-        player.y = Math.min(canvas.height - player.size / 2, player.y + player.speed);
-      }
-      if (keys['arrowleft'] || keys['a'] || keys['q']) {
-        player.x = Math.max(player.size / 2, player.x - player.speed);
-      }
-      if (keys['arrowright'] || keys['d']) {
-        player.x = Math.min(canvas.width - player.size / 2, player.x + player.speed);
-      }
-    }
-    
-    function gameLoop() {
-      updatePlayer();
-      drawScene();
-      drawPlayer();
-      requestAnimationFrame(gameLoop);
-    }
-    
-    gameLoop();
   </script>
 </body>
 </html>
