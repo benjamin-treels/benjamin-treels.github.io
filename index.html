@@ -2,200 +2,231 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>News Globe 3D - Interactif</title>
+  <title>Earthquake Monitor 3D</title>
   <style>
-    body { 
-      margin: 0; 
-      padding: 0; 
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background-color: #000;
-      overflow: hidden;
-    }
-
-    #globeViz {
-      width: 100vw;
-      height: 100vh;
-      cursor: move; /* Indique qu'on peut bouger le globe */
-    }
-
-    /* --- MODALE (Pop-up) --- */
-    #newsModal {
-      display: none;
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: #1a1a1a; /* Fond sombre plus moderne */
-      color: white;
-      width: 400px;
-      max-width: 90%;
-      padding: 25px;
-      border-radius: 12px;
-      border: 1px solid #333;
-      box-shadow: 0 0 50px rgba(255, 68, 68, 0.2);
-      z-index: 100;
-    }
-
-    #newsModal h2 { margin-top: 0; color: #ff4444; }
-    #newsModal p { line-height: 1.6; color: #ccc; }
-    #newsModal img { width: 100%; border-radius: 8px; margin-bottom: 15px; object-fit: cover; height: 200px; }
+    /* --- RESET & BASE --- */
+    body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; background: #050505; overflow: hidden; color: white; }
     
-    .close-btn {
-      position: absolute;
-      top: 10px;
-      right: 15px;
-      font-size: 28px;
-      cursor: pointer;
-      color: #666;
-      transition: color 0.2s;
-    }
-    .close-btn:hover { color: white; }
+    #globeViz { width: 100vw; height: 100vh; cursor: grab; }
+    #globeViz:active { cursor: grabbing; }
 
-    /* Overlay sombre */
-    #overlay {
-      display: none;
-      position: fixed;
-      top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0,0,0,0.8);
-      z-index: 99;
-      backdrop-filter: blur(3px);
-    }
-
-    /* Titres */
-    .site-title {
-      position: absolute;
-      top: 20px;
-      left: 20px;
-      color: white;
+    /* --- SIDEBAR --- */
+    .sidebar {
+      position: absolute; top: 0; left: 0; width: 320px; height: 100%;
+      background: rgba(15, 15, 20, 0.9);
+      backdrop-filter: blur(8px);
+      border-right: 1px solid #333;
+      display: flex; flex-direction: column;
       z-index: 10;
-      pointer-events: none;
-      text-shadow: 0 0 10px black;
     }
-    .site-title h1 { margin: 0; font-size: 24px; text-transform: uppercase; letter-spacing: 2px; color: #ff4444; }
+
+    .header { padding: 20px; border-bottom: 1px solid #333; background: rgba(0,0,0,0.2); }
+    .header h1 { margin: 0; font-size: 20px; text-transform: uppercase; letter-spacing: 1px; color: #ff4444; }
+    .header p { margin: 5px 0 0; font-size: 12px; color: #888; }
+
+    /* Liste scrollable */
+    .quake-list { list-style: none; padding: 0; margin: 0; overflow-y: auto; flex-grow: 1; }
+    
+    .quake-item {
+      padding: 15px 20px;
+      border-bottom: 1px solid #2a2a2a;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      transition: background 0.2s;
+    }
+    .quake-item:hover { background: rgba(255, 255, 255, 0.05); }
+
+    /* Pastille de magnitude */
+    .mag-badge {
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      background: #444;
+      display: flex; justify-content: center; align-items: center;
+      font-weight: bold; font-size: 14px;
+      margin-right: 15px;
+      flex-shrink: 0;
+      border: 2px solid rgba(255,255,255,0.1);
+    }
+
+    .quake-info h3 { margin: 0 0 4px 0; font-size: 14px; color: #ddd; font-weight: 500; }
+    .quake-info span { font-size: 11px; color: #888; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #111; }
+    ::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+
+    /* --- MODALE --- */
+    #infoModal {
+      display: none; position: fixed; bottom: 30px; right: 30px;
+      width: 300px; background: #1a1a1a; border: 1px solid #444;
+      border-radius: 8px; padding: 20px; z-index: 100;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      animation: slideIn 0.3s ease;
+    }
+    @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+    #infoModal h2 { margin: 0 0 10px 0; color: #ff4444; font-size: 18px; }
+    .modal-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; color: #ccc; }
+    .close-btn { position: absolute; top: 10px; right: 10px; cursor: pointer; color: #666; }
+    .btn-zoom { 
+      display: block; width: 100%; padding: 8px; margin-top: 15px; 
+      background: #333; border: none; color: white; cursor: pointer; border-radius: 4px; 
+    }
+    .btn-zoom:hover { background: #444; }
+
   </style>
-  
   <script src="//unpkg.com/globe.gl"></script>
 </head>
 <body>
 
-  <div class="site-title">
-    <h1>Global News 3D</h1>
-    <p>Cliquez sur les points rouges pour voir les détails</p>
+  <div class="sidebar">
+    <div class="header">
+      <h1>Live Quakes 3D</h1>
+      <p>Données temps réel de l'USGS (Dernières 24h)</p>
+    </div>
+    <ul class="quake-list" id="quakeList">
+      <li style="padding:20px; text-align:center; color:#666;">Chargement des données...</li>
+    </ul>
   </div>
 
   <div id="globeViz"></div>
 
-  <div id="overlay" onclick="closeModal()"></div>
-  
-  <div id="newsModal">
-    <span class="close-btn" onclick="closeModal()">&times;</span>
-    <img id="modalImage" src="" alt="News Image">
-    <h2 id="modalTitle">Titre</h2>
-    <p style="font-size: 0.9em; color: #888;">📍 <span id="modalCountry"></span></p>
-    <p id="modalContent">Contenu...</p>
+  <div id="infoModal">
+    <span class="close-btn" onclick="closeModal()">✕</span>
+    <h2 id="modalMag">M 5.4</h2>
+    <div class="modal-row"><span>Lieu :</span> <strong id="modalPlace">...</strong></div>
+    <div class="modal-row"><span>Date :</span> <span id="modalTime">...</span></div>
+    <div class="modal-row"><span>Profondeur :</span> <span id="modalDepth">...</span></div>
+    <a id="usgsLink" href="#" target="_blank" class="btn-zoom">Voir sur le site USGS</a>
   </div>
 
   <script>
-    // 1. DONNÉES
-    const newsData = [
-      {
-        lat: 48.8566, lng: 2.3522,
-        country: "France",
-        title: "Innovation Tech à Paris",
-        content: "Paris devient le nouveau hub européen de l'IA avec l'ouverture de Station F 2.0.",
-        image: "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=500&q=60"
-      },
-      {
-        lat: 40.7128, lng: -74.0060,
-        country: "États-Unis",
-        title: "Wall Street en hausse",
-        content: "Le marché boursier réagit positivement aux nouvelles régulations technologiques.",
-        image: "https://images.unsplash.com/photo-1485871981535-5be8468d930e?auto=format&fit=crop&w=500&q=60"
-      },
-      {
-        lat: 35.6762, lng: 139.6503,
-        country: "Japon",
-        title: "Robotique Avancée",
-        content: "Tokyo présente ses assistants robotiques pour les JO de l'année prochaine.",
-        image: "https://images.unsplash.com/photo-1532236204992-f5e85c024202?auto=format&fit=crop&w=500&q=60"
-      },
-      {
-        lat: -33.8688, lng: 151.2093,
-        country: "Australie",
-        title: "Climat & Océans",
-        content: "Un plan majeur pour la sauvegarde des coraux est lancé ce matin à Sydney.",
-        image: "https://images.unsplash.com/photo-1523482580672-f109ba8cb9be?auto=format&fit=crop&w=500&q=60"
-      },
-      {
-        lat: -22.9068, lng: -43.1729,
-        country: "Brésil",
-        title: "Culture à Rio",
-        content: "Le festival de musique annuel bat son plein avec une affluence record.",
-        image: "https://images.unsplash.com/photo-1564245739699-b511223456e5?auto=format&fit=crop&w=500&q=60"
-      },
-      {
-        lat: 30.0444, lng: 31.2357,
-        country: "Égypte",
-        title: "Découverte Archéologique",
-        content: "Une nouvelle chambre secrète découverte près des grandes pyramides.",
-        image: "https://images.unsplash.com/photo-1539650116455-251601d87cf1?auto=format&fit=crop&w=500&q=60"
-      }
-    ];
+    // 1. URL DE L'API USGS
+    // On demande les séismes > Mag 2.5 des dernières 24h
+    const USGS_API_URL = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson";
 
-    // 2. CONFIGURATION DU GLOBE
-    const world = Globe()
-      (document.getElementById('globeViz'))
-      .globeImageUrl('//unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
-      .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
-      .backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png')
+    let world; // Instance du globe
+    
+    // Fonction pour définir la couleur selon la magnitude
+    function getMagColor(mag) {
+      if (mag >= 6.0) return '#ff0000'; // Rouge fort (Danger)
+      if (mag >= 5.0) return '#ff8800'; // Orange
+      if (mag >= 4.0) return '#ffcc00'; // Jaune
+      return '#00ccff'; // Bleu (Mineur)
+    }
+
+    // Fonction pour récupérer les données
+    fetch(USGS_API_URL)
+      .then(res => res.json())
+      .then(data => {
+        const quakes = data.features; // Tableau des séismes
+        
+        // Trier par date (le plus récent en premier)
+        quakes.sort((a, b) => b.properties.time - a.properties.time);
+
+        initGlobe(quakes);
+        initSidebar(quakes);
+      });
+
+    // 2. INITIALISATION DU GLOBE
+    function initGlobe(quakes) {
+      world = Globe()
+        (document.getElementById('globeViz'))
+        .globeImageUrl('//unpkg.com/three-globe/example/img/earth-night.jpg') // Mode Nuit
+        .backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png')
+        
+        // POINTS (Séismes)
+        .pointsData(quakes)
+        .pointLat(d => d.geometry.coordinates[1])
+        .pointLng(d => d.geometry.coordinates[0])
+        .pointAltitude(d => Math.max(0.03, d.properties.mag * 0.008)) // Plus c'est fort, plus c'est haut
+        .pointRadius(d => Math.max(0.2, d.properties.mag * 0.15)) // Plus c'est fort, plus c'est gros
+        .pointColor(d => getMagColor(d.properties.mag))
+        .pointLabel(d => `Mag ${d.properties.mag} - ${d.properties.place}`)
+        
+        // ONDES (Rings) pour les séismes > 4.5
+        .ringsData(quakes.filter(d => d.properties.mag > 4.5))
+        .ringColor(d => getMagColor(d.properties.mag))
+        .ringMaxRadius(d => d.properties.mag * 1.5)
+        .ringPropagationSpeed(2)
+        .ringRepeatPeriod(800)
+
+        // CLIC
+        .onPointClick(d => {
+          focusOnQuake(d);
+          showModal(d);
+        });
+
+      // Réglages caméra
+      world.controls().autoRotate = true;
+      world.controls().autoRotateSpeed = 0.3;
+      world.pointOfView({ altitude: 2.5 });
+    }
+
+    // 3. INITIALISATION DE LA SIDEBAR
+    function initSidebar(quakes) {
+      const list = document.getElementById('quakeList');
+      list.innerHTML = ''; // Vider le "Chargement..."
+
+      quakes.forEach(q => {
+        const props = q.properties;
+        const date = new Date(props.time).toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'});
+        const color = getMagColor(props.mag);
+
+        const li = document.createElement('li');
+        li.className = 'quake-item';
+        li.innerHTML = `
+          <div class="mag-badge" style="color:${color}; border-color:${color}">
+            ${props.mag.toFixed(1)}
+          </div>
+          <div class="quake-info">
+            <h3>${props.place}</h3>
+            <span>${date} • Profondeur: ${q.geometry.coordinates[2]}km</span>
+          </div>
+        `;
+        
+        li.onclick = () => {
+          world.controls().autoRotate = false;
+          focusOnQuake(q);
+          showModal(q);
+        };
+        
+        list.appendChild(li);
+      });
+    }
+
+    // ACTIONS
+    function focusOnQuake(d) {
+      world.pointOfView({ 
+        lat: d.geometry.coordinates[1], 
+        lng: d.geometry.coordinates[0], 
+        altitude: 1.5 
+      }, 1200);
+    }
+
+    function showModal(d) {
+      const p = d.properties;
+      const date = new Date(p.time).toLocaleString('fr-FR');
       
-      // --- COUCHE DES POINTS (CLIQUABLES) ---
-      .pointsData(newsData)
-      .pointAltitude(0.07)      // Hauteur du point par rapport au sol
-      .pointColor(() => '#ff4444') // Couleur rouge
-      .pointRadius(0.5)         // Taille du point
-      .pointLabel('country')    // Affiche le pays au survol (tooltip natif)
+      document.getElementById('modalMag').innerText = `Magnitude ${p.mag.toFixed(1)}`;
+      document.getElementById('modalMag').style.color = getMagColor(p.mag);
+      document.getElementById('modalPlace').innerText = p.place;
+      document.getElementById('modalTime').innerText = date;
+      document.getElementById('modalDepth').innerText = d.geometry.coordinates[2] + ' km';
+      document.getElementById('usgsLink').href = p.url; // Lien vers la page officielle du séisme
       
-      // L'action au clic (LA PARTIE IMPORTANTE)
-      .onPointClick(point => {
-        // 1. Centrer la caméra sur le point cliqué
-        world.pointOfView({ lat: point.lat, lng: point.lng, altitude: 1.8 }, 1000);
-        // 2. Ouvrir la modale
-        openModal(point);
-      })
-
-      // --- COUCHE DES ANNEAUX (EFFET VISUEL) ---
-      .ringsData(newsData)
-      .ringColor(() => '#ff4444')
-      .ringMaxRadius(5)
-      .ringPropagationSpeed(2)
-      .ringRepeatPeriod(800);
-
-    // Options de la caméra
-
-    // 3. GESTION MODALE
-    const modal = document.getElementById('newsModal');
-    const overlay = document.getElementById('overlay');
-
-    function openModal(data) {
-
-      document.getElementById('modalTitle').innerText = data.title;
-      document.getElementById('modalCountry').innerText = data.country;
-      document.getElementById('modalContent').innerText = data.content;
-      document.getElementById('modalImage').src = data.image;
-
-      modal.style.display = 'block';
-      overlay.style.display = 'block';
+      document.getElementById('infoModal').style.display = 'block';
     }
 
     function closeModal() {
-      modal.style.display = 'none';
-      overlay.style.display = 'none';
+      document.getElementById('infoModal').style.display = 'none';
+      world.controls().autoRotate = true;
     }
 
-    // Responsive
     window.addEventListener('resize', () => {
-      world.width(window.innerWidth).height(window.innerHeight);
+      if(world) world.width(window.innerWidth).height(window.innerHeight);
     });
   </script>
 </body>
